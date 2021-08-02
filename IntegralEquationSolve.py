@@ -30,10 +30,11 @@ class IntegralEquationSolver:
         self.left_bound = a
         self.right_bound = b
         self.number_of_points = 20
+        self.n_of_integr_points = 100
         self.batch_size = 1
 
-        self.int_step = np.abs(
-            (self.right_bound - self.left_bound) / (self.number_of_points - 1)
+        self.integral_elementary_square = np.abs(
+            (self.right_bound - self.left_bound) / (self.n_of_integr_points - 1)
         )
         self.loss = torch.nn.MSELoss()
         n_inputs = 1
@@ -41,9 +42,11 @@ class IntegralEquationSolver:
         n_outputs = 1
         self.nn_model = CustomClass(n_inputs, n_hidden_neurons, n_outputs)
         self.nn_model.to(self.device)
-        self.num_epochs = 60
+        self.num_epochs = 100
 
-        self.optimizer = torch.optim.Adam(self.nn_model.parameters(), lr=1e-4)
+        self.optimizer = torch.optim.SGD(self.nn_model.parameters(), lr=3e-4, momentum = 0.99)
+        # self.optimizer = torch.optim.Adam(self.nn_model.parameters(), lr = 3e-4, betas=(0.99, 0.9999))
+        # self.optimizer = torch.optim.RMSprop(self.nn_model.parameters(), lr = 3e-4)
         self.scheduler = torch.optim.lr_scheduler.StepLR(
             self.optimizer, step_size=3, gamma=1
         )
@@ -73,18 +76,18 @@ class IntegralEquationSolver:
             self.AbsoluteError(true_solution, approximation)
         )
 
-    def get_1d_domain(self, a, b):
-        domain = torch.linspace(a, b, self.number_of_points).unsqueeze(1)
+    def get_1d_domain(self, a, b, n_points):
+        domain = torch.linspace(a, b, n_points).unsqueeze(1)
         domain = domain.to(device)
         return domain
 
     def get_integral_midpoints(self):
-        domain = self.get_1d_domain(self.left_bound, self.right_bound)
+        domain = self.get_1d_domain(self.left_bound, self.right_bound, self.n_of_integr_points)
         points = (domain[0:-1] + domain[1:]) / 2
-        return points.reshape(self.number_of_points - 1, 1)
+        return points.reshape(self.n_of_integr_points - 1, 1)
 
     def get_train_valid_domains(self):
-        train_domain = self.get_1d_domain(self.left_bound, self.right_bound)
+        train_domain = self.get_1d_domain(self.left_bound, self.right_bound, self.number_of_points)
         step_aside = np.abs(
             (self.right_bound - self.left_bound) / (2 * self.number_of_points)
         )
@@ -181,7 +184,7 @@ class IntegralEquationSolver:
 
                 integral_value = (
                     sum(self.integral_part(input, self.integral_mid_points, self.nn_model))
-                    * self.int_step
+                    * self.integral_elementary_square
                 )
 
                 residual -= integral_value
